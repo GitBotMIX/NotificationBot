@@ -1,0 +1,91 @@
+from aiogram import types, Dispatcher
+from create_bot import dp, bot
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from keyboards import youtube_kb
+from data_base.sqlite_db import Database
+from notifications import Scheduler
+
+from functions import youtube_url
+
+from states import youtube_states
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+
+
+async def choice_youtube(message: types.Message):
+    await message.answer('Что делаем с ютубом?', reply_markup=youtube_kb.kb_youtube)
+
+
+async def add_youtube_channel(message: types.Message):
+    await message.answer('Введи ссылку на канал:')
+    await youtube_states.AddChannel.message.set()
+    await youtube_states.AddChannel.next()
+    await Scheduler().youtube_video_listen()
+
+
+async def add_youtube_channel_set(message: types.Message, state: FSMContext):
+    message_text = await youtube_url.url_corrector(message.text)
+    channel_name = await youtube_url.check(message_text)
+    user_id = str(message.from_user.id)
+    url_user_existence_check = await Database().get_all_row_in_table_where_and(
+        'youtube', 'channel_url', 'channel_url', 'user_id', message_text, user_id
+    )
+    if channel_name == False:
+        await message.answer('Такого канала не существует!')
+        await state.finish()
+    else:
+        if url_user_existence_check:
+            await message.answer('Уведомления о этом канале уже включены')
+        else:
+            if await Database().existance_check_user_id(user_id, 'youtube') == False or \
+                    await Database().existance_check_user_id(user_id, 'notification_status') == False:
+                await Database().sql_notification_status_add('ON', 'youtube', user_id)
+            await Database().sql_youtube_add(channel_name, message_text, await youtube_url.parse_videos(message_text),
+                                           user_id)
+            await message.answer(f'Уведомления о канале "{channel_name}" включены!')
+        await state.finish()
+
+
+def get_keyboard_delete_youtube_channel(data):
+    markup = InlineKeyboardMarkup() # создаём клавиатуру
+    markup.row_width = 1 # кол-во кнопок в строке
+    for i in data: # цикл для создания кнопок
+        markup.add(InlineKeyboardButton(i[0], callback_data=f'del {i[0]}')) #Создаём кнопки, i[1] - название, i[2] - каллбек дата
+    return markup #возвращаем клавиатуру
+
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('del '))
+async def delete_callback_execute(callback_query: types.CallbackQuery):
+    callback_query.data = callback_query.data.replace('del ', '')
+    await Database().sql_remove_where_and(
+        'youtube', 'channel_name', 'user_id', callback_query.data, callback_query.from_user.id)
+    await callback_query.answer(text=f'Уведомления о канале "{callback_query.data}" выключены')
+    #await bot.send_message(callback_query.from_user.id, f'Уведомления о канале "{callback_query.data}" выключены',)
+    data = await Database().get_all_row_in_table_where('youtube', 'channel_name', 'user_id',
+                                                       callback_query.from_user.id)
+    await callback_query.message.edit_text(
+        text='Какой канал удалить?', reply_markup=get_keyboard_delete_youtube_channel(data))
+
+
+
+
+
+async def delete_youtube_channel(message: types.Message):
+    data = await Database().get_all_row_in_table_where('youtube', 'channel_name', 'user_id', message.from_user.id)
+    await message.answer('Какой канал удалить?', reply_markup=get_keyboard_delete_youtube_channel(data))
+
+
+# async def youtube_notifications_turn_on(message: types.Message):
+# async def youtube_notifications_turn_off(message: types.Message):
+
+
+def register_handlers_client(dp: Dispatcher):
+    dp.register_message_handler(add_youtube_channel, text_contains=['Добавить канал'])
+    dp.register_message_handler(add_youtube_channel_set, state=youtube_states.AddChannel.set_channel)
+    dp.register_message_handler(delete_youtube_channel, text_contains=['Удалить канал'])
+    """
+    dp.register_message_handler(add_item, text_contains=['Удалить канал'])
+    dp.register_message_handler(add_item, text_contains=['Включить уведомления'])
+    dp.register_message_handler(add_item, text_contains=['Выключить уведомления'])
+    """

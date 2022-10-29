@@ -8,6 +8,8 @@ async def check(url):
         title_text = title_textF(url)
     except:
         return False
+    if 'https://www.youtube.com/c/' not in url and 'https://www.youtube.com/channel/' not in url:
+        return False
     if 'https://www.youtube.com/' in url:
         if '404 Not Found' not in title_text:
             return title_text.replace(' - YouTube', '')
@@ -52,6 +54,6 @@ def parse_videos_test(url):
     search = soup.find_all('script')
     key = '"videoId":"'
     data = re.findall(key +r'([^*]{11})', str(search))
-    return data[0]
+    return data
 
-#print(parse_videos_test('https://www.youtube.com/c/StarGameWF/videos'))
+#print(parse_videos_test('https://www.youtube.com/c/stayugly_/videos'))

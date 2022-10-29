@@ -7,7 +7,7 @@ from create_bot import dp, bot
 
 class Scheduler:
     async def make_task(self):
-        aioschedule.every(10).seconds.do(self.youtube_video_listen)
+        aioschedule.every(3).seconds.do(self.youtube_video_listen)
         #aioschedule.every(5).seconds.do(self.display_notification)
         while True:
             await aioschedule.run_pending()

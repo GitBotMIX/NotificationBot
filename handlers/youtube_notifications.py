@@ -13,7 +13,6 @@ from states import youtube_states
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-
 async def choice_youtube(message: types.Message):
     await message.answer('Что делаем с ютубом?', reply_markup=youtube_kb.kb_youtube)
 
@@ -39,21 +38,22 @@ async def add_youtube_channel_set(message: types.Message, state: FSMContext):
         if url_user_existence_check:
             await message.answer('Уведомления о этом канале уже включены')
         else:
-            if await Database().existance_check_user_id(user_id, 'youtube') == False or \
-                    await Database().existance_check_user_id(user_id, 'notification_status') == False:
+            if await Database().existance_check_user_id(user_id, 'notification_status') == False:
                 await Database().sql_notification_status_add('ON', 'youtube', user_id)
-            await Database().sql_youtube_add(channel_name, message_text, await youtube_url.parse_videos(message_text),
-                                           user_id)
             await message.answer(f'Уведомления о канале "{channel_name}" включены!')
+            await Database().sql_youtube_add(channel_name, message_text, await youtube_url.parse_videos(message_text),
+                                             user_id)
         await state.finish()
 
 
 def get_keyboard_delete_youtube_channel(data):
-    markup = InlineKeyboardMarkup() # создаём клавиатуру
-    markup.row_width = 1 # кол-во кнопок в строке
-    for i in data: # цикл для создания кнопок
-        markup.add(InlineKeyboardButton(i[0], callback_data=f'del {i[0]}')) #Создаём кнопки, i[1] - название, i[2] - каллбек дата
-    return markup #возвращаем клавиатуру
+    markup = InlineKeyboardMarkup()  # создаём клавиатуру
+    markup.row_width = 1  # кол-во кнопок в строке
+    for i in data:  # цикл для создания кнопок
+        markup.add(InlineKeyboardButton(i[0],
+                                        callback_data=f'del {i[0]}'))  # Создаём кнопки, i[1] - название, i[2] - каллбек дата
+    return markup  # возвращаем клавиатуру
+
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('del '))
 async def delete_callback_execute(callback_query: types.CallbackQuery):
@@ -61,19 +61,46 @@ async def delete_callback_execute(callback_query: types.CallbackQuery):
     await Database().sql_remove_where_and(
         'youtube', 'channel_name', 'user_id', callback_query.data, callback_query.from_user.id)
     await callback_query.answer(text=f'Уведомления о канале "{callback_query.data}" выключены')
-    #await bot.send_message(callback_query.from_user.id, f'Уведомления о канале "{callback_query.data}" выключены',)
+    # await bot.send_message(callback_query.from_user.id, f'Уведомления о канале "{callback_query.data}" выключены',)
     data = await Database().get_all_row_in_table_where('youtube', 'channel_name', 'user_id',
                                                        callback_query.from_user.id)
     await callback_query.message.edit_text(
         text='Какой канал удалить?', reply_markup=get_keyboard_delete_youtube_channel(data))
 
 
-
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('upd '))
+async def update_youtube_notification_status(call: types.CallbackQuery):
+    status = {'ON': 'выключены', 'OFF': 'включены'}
+    send_sql_status = {'ON': 'OFF', 'OFF': 'ON'}
+    call_data = call.data.replace('upd ', '')
+    await Database().sql_update('notification_status', 'status', 'user_id', send_sql_status[call_data], str(call.from_user.id))
+    await call.answer(text=f'Youtube уведомления "{status[call_data]}"')
+    notification_status = await Database().get_all_row_in_table_where(
+        'notification_status', 'status', 'user_id', str(call.from_user.id))
+    await call.message.edit_text(
+        text='Что сделать с уведомлениями?',
+        reply_markup=get_keyboard_youtube_notifications_setting(notification_status))
 
 
 async def delete_youtube_channel(message: types.Message):
     data = await Database().get_all_row_in_table_where('youtube', 'channel_name', 'user_id', message.from_user.id)
     await message.answer('Какой канал удалить?', reply_markup=get_keyboard_delete_youtube_channel(data))
+
+
+def get_keyboard_youtube_notifications_setting(notification_status):
+    status = {'ON': 'Выключить', 'OFF': 'Включить'}
+    markup = InlineKeyboardMarkup()  # создаём клавиатуру
+    markup.row_width = 1  # кол-во кнопок в строке
+    markup.add(InlineKeyboardButton(
+        f'{status[notification_status[0][0]]} уведомления', callback_data=f'upd {notification_status[0][0]}'))
+    return markup
+
+
+async def notification_youtube_setting(message: types.Message):
+    notification_status = await Database().get_all_row_in_table_where(
+        'notification_status', 'status', 'user_id', str(message.from_user.id))
+    await message.answer('Что сделать с уведомлениями?',
+                         reply_markup=get_keyboard_youtube_notifications_setting(notification_status))
 
 
 # async def youtube_notifications_turn_on(message: types.Message):
@@ -84,8 +111,5 @@ def register_handlers_client(dp: Dispatcher):
     dp.register_message_handler(add_youtube_channel, text_contains=['Добавить канал'])
     dp.register_message_handler(add_youtube_channel_set, state=youtube_states.AddChannel.set_channel)
     dp.register_message_handler(delete_youtube_channel, text_contains=['Удалить канал'])
-    """
-    dp.register_message_handler(add_item, text_contains=['Удалить канал'])
-    dp.register_message_handler(add_item, text_contains=['Включить уведомления'])
-    dp.register_message_handler(add_item, text_contains=['Выключить уведомления'])
-    """
+    dp.register_message_handler(notification_youtube_setting, text_contains=['Настройка уведомлений'])
+

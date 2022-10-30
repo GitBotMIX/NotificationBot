@@ -2,7 +2,7 @@ from aiogram import types, Dispatcher
 from create_bot import dp, bot
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from handlers import youtube_notifications
+from handlers import youtube_notifications, weather
 
 from keyboards import main_kb
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -15,5 +15,6 @@ async def start(message: types.Message):
 
 def register_handlers_client(dp: Dispatcher):
     dp.register_message_handler(youtube_notifications.choice_youtube, text_contains=['YouTube'])
+    dp.register_message_handler(weather.choice_weather, text_contains=['Yandex'])
     dp.register_message_handler(start, commands=['start'])
     dp.register_message_handler(get_main_menu_kb, commands=['назад'])

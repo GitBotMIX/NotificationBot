@@ -12,10 +12,11 @@ async def start(*args):
     asyncio.create_task(Scheduler().make_task())
 
 
-from handlers import youtube_notifications, weather, currency_notifications, main_menu
+from handlers import youtube_notifications, weather, currency_notifications, main_menu, account_settings
 youtube_notifications.register_handlers_client(dp)
 main_menu.register_handlers_client(dp)
 weather.register_handlers_client(dp)
+account_settings.register_handlers_client(dp)
 
 
 

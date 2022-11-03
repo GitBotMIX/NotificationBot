@@ -44,6 +44,10 @@ class Database:
                     (str(city_name), yandex_url, str(coordinates), str(user_id)))
         base.commit()
 
+    async def sql_weather_notification_add(self, time, user_id):
+        self.values_amount = '?, ?'
+        self.service_name = 'weather_notification'
+        await self.sql_add((time, user_id,))
     async def sql_weather_add(self, city_name, coordinates, yandex_url, user_id):
         self.values_amount = '?, ?, ?, ?'
         self.service_name = 'weather'

@@ -13,7 +13,7 @@ class Database:
         cur = base.cursor()
         if base:
             print('Data base connected OK!')
-        base.execute('CREATE TABLE IF NOT EXISTS notification_status(status TEXT, service TEXT, user_id TEXT)')
+        base.execute('CREATE TABLE IF NOT EXISTS notification_status(youtube TEXT, weather TEXT, user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS youtube(channel_name TEXT, channel_url TEXT, current_video TEXT, user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS weather(city_name TEXT, coordinates TEXT, yandex_url TEXT, user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS weather_notification(time TEXT, user_id TEXT)')
@@ -34,15 +34,20 @@ class Database:
         self.service_name = 'youtube'
         await self.sql_add((channel_name, channel_url, current_video, user_id,))
 
-    async def sql_notification_status_add(self, notification_status, service, user_id):
+    async def sql_notification_status_add(self, notification_status, user_id):
         self.values_amount = '?, ?, ?'
         self.service_name = 'notification_status'
-        await self.sql_add((notification_status, service, user_id,))
+        await self.sql_add((notification_status, notification_status, user_id,))
 
     async def sql_weather_update(self, city_name, yandex_url, coordinates, user_id):
         cur.execute(f'UPDATE weather SET city_name == ?, yandex_url == ?, coordinates == ? WHERE user_id == ?',
                     (str(city_name), yandex_url, str(coordinates), str(user_id)))
         base.commit()
+
+    async def sql_weather_api_key_add(self, api_key: str, user_id: str):
+        self.values_amount = '?, ?'
+        self.service_name = 'weather_api_key'
+        await self.sql_add((api_key, user_id,))
 
     async def sql_weather_notification_add(self, time, user_id):
         self.values_amount = '?, ?'
@@ -61,7 +66,7 @@ class Database:
         cur.execute(f'UPDATE {table} SET {set} == ? WHERE {where} == ?', (str(set_data), str(where_data),))
         base.commit()
     async def existance_check(self, data):
-        if data == None:
+        if data is None:
             return False
         return True
 

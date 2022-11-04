@@ -26,16 +26,20 @@ async def set_city_input(message: types.Message):
 
 async def set_city(message: types.Message, state: FSMContext):
     coordinates = await YandexWeather.get_coordinates_from_city_name(message.text)
-    if coordinates != False:
+    if coordinates:
         await message.answer('Город обновлен!', reply_markup=kb_weather)
-        WeatherInformation = GetWeatherInformation("0ee81c81-7477-4de2-9c5f-9f6f83984176", coordinates)
+        api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
+        WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates)
         yandex_url = await WeatherInformation.get_yandex_site_url()
         await Database().sql_weather_update(message.text, yandex_url, coordinates, str(message.from_user.id))
     else:
         await message.answer('Введено не верное название города!', reply_markup=kb_main)
     await state.finish()
 
-
+async def add_api_key(message: types.Message):
+    api_key_data = message.text.replace('Добавить API Ключ: ', '')
+    await Database().sql_weather_api_key_add(api_key_data, str(message.from_user.id))
+    await message.answer('Добавил ключ!')
 
 
 
@@ -43,3 +47,4 @@ def register_handlers_client(dp: Dispatcher):
     dp.register_message_handler(set_city, state=weather_states.UpdateCity.set_city)
     dp.register_message_handler(get_menu, commands=['Настройки'])
     dp.register_message_handler(set_city_input, text_contains=['Изменить город'])
+    dp.register_message_handler(add_api_key, text_contains=['Добавить API Ключ:'])

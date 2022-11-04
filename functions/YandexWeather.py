@@ -3,6 +3,8 @@ from functions import yandex_weather_requests_parameters
 from geopy import Nominatim
 from geopy.adapters import AioHTTPAdapter
 from pprint import pprint
+import datetime
+
 
 
 class GetWeatherInformation:
@@ -26,7 +28,6 @@ class GetWeatherInformation:
         self.extra = extra
         self.apiKey = api_key
 
-
     async def get_current_temperature(self):
         request = await self.requests_get()
         return request.json()
@@ -37,7 +38,6 @@ class GetWeatherInformation:
         evening = request.json()["forecasts"][0]["hours"][19]["condition"]
         night = request.json()["forecasts"][0]["parts"]["night_short"]
         return morning, dinner, evening, night
-
 
     async def get_weather_arrays(self):
         condition_text = {'clear': 'ясно',
@@ -91,23 +91,64 @@ class GetWeatherInformation:
                         'n': '🌚'}
         return condition_text, condition_icon, wind_dir_icon, daytime_icon
 
+    async def get_request_json(self, request, obj, day):
+        return request.json()[obj][int(day)]
+
+    async def get_weather_info_prec_period(self, request, time):
+        obj = 'forecasts'
+        time = int(time)
+        request_json = await self.get_request_json(request, obj, '0')
+        prec_type = request_json['hours'][time]["prec_type"]
+
+        return prec_type
 
     async def get_yandex_site_url(self):
         request = await self.requests_get()
         return request.json()['info']["url"]
 
-
-
+    async def prec_for_time_check(self, request, hour: int):
+        hour_one = await self.get_weather_info_prec_period(request, hour)
+        print(hour_one)
+        if hour_one != 0:
+            return hour_one, 1
+        else:
+            hour_two = await self.get_weather_info_prec_period(request, hour + 1)
+            if hour_two != 0:
+                return hour_two, 2
+            else:
+                hour_three = await self.get_weather_info_prec_period(request, hour + 2)
+                if hour_three != 0:
+                    return hour_three, 3
+                else:
+                    return False, False
     async def get_current_weather(self):
         request = await self.requests_get()
+        current_hour = await self.get_current_hour(request)
+        #current_hour = 8
+
         temperature, temperature_feels_like, wind_speed,\
         humidity, wind_dir, condition = await self.get_weather_info_fact(request)
+        condition_it_raining = ['drizzle', 'light-rain', 'rain', 'moderate-rain', 'heavy-rain', 'continuous-heavy-rain',
+                                'showers', 'wet-snow', 'light-snow', 'snow', 'snow-showers', 'hail',
+                                'thunderstorm-with-rain', 'thunderstorm-with-hail']
         condition_text, condition_icon, wind_dir_icon, daytime_icon = await self.get_weather_arrays()
-        #condition_morning, condition_dinner, condition_evening, condition_night = await self.get_condition_now_day(request)
+        if condition in condition_it_raining:
+            prec_text = ''
+        else:
+            prec_type_text_array = {1: 'дождь', 2: 'дождь со снегом', 3: 'снег', 4: 'град'}
+            prec_type_symbol_array = {1: '☔', 2: '☔', 3: '☃', 4: '☄'}
+            prec_for_time, prec_for_time_hour = await self.prec_for_time_check(request, int(current_hour))
+            if prec_for_time:
+                if prec_for_time_hour == 1:
+                    prec_text = f'{prec_type_symbol_array[prec_for_time]}' \
+                                f'В течение часа ожидается {prec_type_text_array[prec_for_time]}'
+                else:
+                    prec_text = f'{prec_type_symbol_array[prec_for_time]}' \
+                                f'В ближайшие {prec_for_time_hour} часа ожидается {prec_type_text_array[prec_for_time]}'
+            else:
+                prec_text = f'⛱В ближайшие 3 часа осадков не ожидается '
         return await self.get_weather_text_fact(condition_icon, condition_text, condition, temperature,
-                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, humidity)
-
-
+                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, humidity, prec_text)
 
     async def get_day_weather(self, day):
         request = await self.requests_get()
@@ -142,16 +183,14 @@ class GetWeatherInformation:
                f'       {wind_dir_icon[wdn]}{wsn}м/c\n' \
                f'       💧{hn}%\n'
 
-
-
     async def get_weather_text_fact(self, condition_icon, condition_text, condition, temperature,
-                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, humidity):
+                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, humidity, prec_type):
         return f'Сейчас:\n\n' \
                f'   {condition_icon[condition]}{condition_text[condition].title()}\n' \
                f'   🌡{temperature}°({temperature_feels_like}°)\n' \
                f'   {wind_dir_icon[wind_dir]}{wind_speed}м/c\n' \
-               f'   💧{humidity}%\n\n'
-
+               f'   💧{humidity}%\n\n' \
+               f'   {prec_type}'
 
     async def get_weather_info_parts(self, request_json, part_name):
         temperature = request_json['parts'][part_name]["temp_avg"]
@@ -170,20 +209,12 @@ class GetWeatherInformation:
         wind_dir = request.json()['fact']["wind_dir"]
         condition = request.json()['fact']["condition"]
         return temperature, temperature_feels_like, wind_speed, humidity, wind_dir, condition
-    async def get_weather_info_day(self, request_json, time):
-        obj = 'forecasts'
-        time = int(time)
-        #requert_json = self.get_request_json_day()
-        temperature = request_json['hours'][time]["temp"]
-        temperature_feels_like = request_json['hours'][time]["feels_like"]
-        wind_speed = request_json['hours'][time]["wind_speed"]
-        humidity = request_json['hours'][time]["humidity"]
-        wind_dir = request_json['hours'][time]["wind_dir"]
-        condition = request_json['hours'][time]["condition"]
-        return temperature,temperature_feels_like, wind_speed, humidity, wind_dir, condition
 
-    async def get_request_json(self, request, obj, day):
-        return request.json()[obj][int(day)]
+    async def get_current_hour(self, request):
+        data = request.json()['now']
+        timestamp = data
+        value = datetime.datetime.fromtimestamp(timestamp)
+        return value.strftime('%H')
 
 
 async def get_coordinates_from_city_name(city_name):
@@ -193,3 +224,12 @@ async def get_coordinates_from_city_name(city_name):
             return f'{str(location.latitude)} {str(location.longitude)}'
         except:
             return False
+
+
+async def list_tuple_to_list_str(list_tuple: list) -> list:
+    new_list = []
+    for i in list_tuple:
+        new_list.append(i[0])
+    return new_list
+
+

@@ -39,7 +39,7 @@ async def add_youtube_channel_set(message: types.Message, state: FSMContext):
             await message.answer('Уведомления о этом канале уже включены')
         else:
             if await Database().existance_check_user_id(user_id, 'notification_status') == False:
-                await Database().sql_notification_status_add('ON', 'youtube', user_id)
+                await Database().sql_notification_status_add('ON', user_id)
             await message.answer(f'Уведомления о канале "{channel_name}" включены!')
             await Database().sql_youtube_add(channel_name, message_text, await youtube_url.parse_videos(message_text),
                                              user_id)
@@ -73,13 +73,12 @@ async def update_youtube_notification_status(call: types.CallbackQuery):
     status = {'ON': 'выключены', 'OFF': 'включены'}
     send_sql_status = {'ON': 'OFF', 'OFF': 'ON'}
     call_data = call.data.replace('upd ', '')
-    await Database().sql_update('notification_status', 'status', 'user_id', send_sql_status[call_data], str(call.from_user.id))
+    await Database().sql_update('notification_status', 'youtube', 'user_id', send_sql_status[call_data],
+                                str(call.from_user.id))
     await call.answer(text=f'Youtube уведомления "{status[call_data]}"')
     notification_status = await Database().get_all_row_in_table_where(
-        'notification_status', 'status', 'user_id', str(call.from_user.id))
-    await call.message.edit_text(
-        text='Что сделать с уведомлениями?',
-        reply_markup=get_keyboard_youtube_notifications_setting(notification_status))
+        'notification_status', 'youtube', 'user_id', str(call.from_user.id))
+    await call.message.edit_text(text=f'Youtube уведомления "{status[call_data]}"')
 
 
 async def delete_youtube_channel(message: types.Message):
@@ -98,7 +97,7 @@ def get_keyboard_youtube_notifications_setting(notification_status):
 
 async def notification_youtube_setting(message: types.Message):
     notification_status = await Database().get_all_row_in_table_where(
-        'notification_status', 'status', 'user_id', str(message.from_user.id))
+        'notification_status', 'youtube', 'user_id', str(message.from_user.id))
     await message.answer('Что сделать с уведомлениями?',
                          reply_markup=get_keyboard_youtube_notifications_setting(notification_status))
 

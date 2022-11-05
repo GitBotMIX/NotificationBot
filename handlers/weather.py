@@ -15,7 +15,11 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 async def choice_weather(message: types.Message):
-    if await Database().get_all_row_in_table_where('weather', 'user_id', 'user_id', str(message.from_user.id)):
+    user_id = message.from_user.id
+    account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+    if not account_status:
+        await Database().sql_account_add(user_id)
+    if await Database().get_all_row_in_table_where('weather', 'user_id', 'user_id', user_id):
         await message.answer('Меню Yandex.Weather', reply_markup=kb_weather)
     else:
         await message.answer(f'Введи название своего города:')
@@ -26,30 +30,66 @@ async def choice_weather(message: types.Message):
 async def add_city(message: types.Message, state: FSMContext):
     coordinates = await YandexWeather.get_coordinates_from_city_name(message.text)
     if coordinates != False:
-        await message.answer('Город сохранен!', reply_markup=kb_weather)
         api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
         try:
             WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates)
         except IndexError:
             await message.answer('api-key is not valid')
             return
+        await message.answer('Город сохранен!', reply_markup=kb_weather)
         yandex_url = await WeatherInformation.get_yandex_site_url()
         await Database().sql_weather_add(message.text, coordinates, yandex_url, str(message.from_user.id))
-
     else:
         await message.answer('Введено не верное название города!', reply_markup=kb_main)
     await state.finish()
 
+async def check_user_account_status_callback(call, notifications_list):
+    user_id = call.from_user.id
+    user_account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+    if user_account_status[0][0] == 'default':
+        if len(notifications_list) >= 2:
+            await call.message.delete()
+            await call.answer('Необходимо преобрести премиум')
+            await call.message.answer(
+                'Достигнут лимит по количеству уведомлений о погоде, что-бы делать больше уведомлений'
+                ' о погоде необходимо преобрести премиум, что-бы преобрести премиум воспользуйся'
+                ' командой - /get_premium')
+            return False
+    return True
+async def check_user_account_status(message):
+    user_id = message.from_user.id
+    user_account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+    if user_account_status[0][0] == 'default':
+        requests_amount = await Database().get_all_row_in_table_where('weather', 'requests_amount', 'user_id', user_id)
+        if int(requests_amount[0][0]) >= 10:
+            await message.answer('Превышен лимит суточных запросов для бесплатного акаунта, что-бы смотреть погоду чаще, '
+                                 'необходимо преобрести премиум, что-бы преобрести премиум, воспользуйся командой'
+                                 ' - /get_premium')
+            return False
+        await Database().sql_update('weather', 'requests_amount', 'user_id', int(requests_amount[0][0]) + 1, user_id)
+    return True
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('weather '))
 async def weather_query_handler(call: types.CallbackQuery):
     call_data = call.data.replace('weather ', '')
+    user_id = call.from_user.id
+    requests_amount = await Database().get_all_row_in_table_where('weather', 'requests_amount', 'user_id', user_id)
+    user_account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+    if user_account_status[0][0] == 'default':
+        if int(requests_amount[0][0]) >= 10:
+            await call.answer('Превышен лимит суточных запросов')
+            await call.message.answer('Превышен лимит суточных запросов для бесплатного акаунта,'
+                                      ' что-бы смотреть погоду чаще, '
+                                 'необходимо преобрести премиум, что-бы преобрести премиум, воспользуйся командой'
+                                 ' - /get_premium')
+            return
+    await Database().sql_update('weather', 'requests_amount', 'user_id', int(requests_amount[0][0])+1, user_id)
     coordinates = await Database().get_all_row_in_table_where(
         'weather', 'coordinates', 'user_id', str(call.from_user.id)
     )
     api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
     WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates[0][0])
-    url = await Database().get_all_row_in_table_where("weather", "yandex_url", "user_id", str(call.from_user.id))
+    url = await Database().get_all_row_in_table_where("weather", "yandex_url", "user_id", user_id)
     if call_data == 'fact':
         await call.answer('Информация о погоде сейчас')
         await call.message.edit_text(
@@ -68,11 +108,15 @@ async def weather_query_handler(call: types.CallbackQuery):
             reply_markup=markups.get_weather_inline_kb(call, url))
 
 
+
 async def get_weather(message: types.Message):
     user_id = message.from_user.id
     exist_user_autorizate = await Database().get_all_row_in_table_where('weather', 'user_id', 'user_id', user_id)
+    user_account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
     if not exist_user_autorizate:
         await choice_weather(message)
+        return
+    if not await check_user_account_status(message):
         return
     coordinates = await Database().get_all_row_in_table_where(
         'weather', 'coordinates', 'user_id', str(user_id))
@@ -112,6 +156,8 @@ async def user_set_notification(message: types.Message):
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('weather_notif '))
 async def weather_add_notification(call: types.CallbackQuery):
     user_id = call.from_user.id
+    notifications_list = await Database().get_all_row_in_table_where('weather_notification', 'time', 'user_id', user_id)
+
     call_data_list = call.data.split(':')
     call_data = call_data_list[0].replace('weather_notif ', '')
     operation_status = call_data_list[1].replace('operation_status ', '')
@@ -123,6 +169,8 @@ async def weather_add_notification(call: types.CallbackQuery):
         return notification_status, existing_time
 
     if operation_status == '+':
+        if not await check_user_account_status_callback(call, notifications_list):
+            return
         await Database().sql_weather_notification_add(call_data, str(user_id))
         notification_status, existing_time = await get_attr()
         await call.message.edit_text("Выбери время ежедневного уведомления о прогнозе",
@@ -134,7 +182,6 @@ async def weather_add_notification(call: types.CallbackQuery):
         await call.message.edit_text("Выбери время ежедневного уведомления о прогнозе",
                                      reply_markup=markups.get_weather_notification_kb(notification_status[0][0],
                                                                                       existing_time))
-
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('weather_notif_upd '))
 async def weather_upd_status_notification(call: types.CallbackQuery):

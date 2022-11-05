@@ -15,13 +15,27 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 async def choice_youtube(message: types.Message):
     await message.answer('Что делаем с ютубом?', reply_markup=youtube_kb.kb_youtube)
+    user_id = message.from_user.id
+    account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+    if not account_status:
+        await Database().sql_account_add(user_id)
+
 
 
 async def add_youtube_channel(message: types.Message):
+    youtube_channel_list = await Database().get_all_row_in_table_where(
+        'youtube', 'channel_name', 'user_id', message.from_user.id)
+    if len(youtube_channel_list) >= 4:
+        await message.answer('Достигнут лимит по отслеживаемым каналам, чтобы отслеживать более 4 каналов необходимо '
+                             'преобрести премиум, что-бы преобрести премиум воспользуйся командой - /get_premium')
+        return
     await message.answer('Введи ссылку на канал:')
+    user_id = message.from_user.id
+    account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+    if not account_status:
+        await Database().sql_account_add(user_id)
     await youtube_states.AddChannel.message.set()
     await youtube_states.AddChannel.next()
-    await Scheduler().youtube_video_listen()
 
 
 async def channel_name_corrector(channel_name):

@@ -4,6 +4,7 @@ from geopy import Nominatim
 from geopy.adapters import AioHTTPAdapter
 from pprint import pprint
 import datetime
+from data_base.sqlite_db import Database
 
 
 

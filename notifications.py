@@ -8,6 +8,7 @@ import time
 from functions.YandexWeather import GetWeatherInformation
 
 
+
 class Scheduler:
     async def make_task(self):
         aioschedule.every(30).seconds.do(self.youtube_video_listen)
@@ -28,10 +29,26 @@ class Scheduler:
         time = datetime.datetime.utcfromtimestamp(unix_time)
         return int(time.strftime('%H'))
 
+    async def check_user_account_status(self, user_id):
+        user_account_status = await Database().get_all_row_in_table_where('account', 'status', 'user_id', user_id)
+        if user_account_status[0][0] == 'default':
+            requests_amount = await Database().get_all_row_in_table_where('weather', 'requests_amount', 'user_id',
+                                                                          user_id)
+            if int(requests_amount[0][0]) >= 10:
+                await bot.send_message(user_id,
+                    'Превышен лимит суточных запросов для бесплатного акаунта, что-бы смотреть погоду чаще, '
+                    'необходимо преобрести премиум, что-бы преобрести премиум, воспользуйся командой'
+                    ' - /get_premium')
+                return False
+            await Database().sql_update('weather', 'requests_amount', 'user_id', int(requests_amount[0][0]) + 1,
+                                        user_id)
+        return True
 
     async def send_weather_notification(self):
         weather_notification_list = await Database().get_all_rows_in_table('weather_notification')
         for listEl in weather_notification_list:
+            if not weather_notification_list:
+                return
             user_id = listEl[2]
             send_status = listEl[1]
             notification_time = listEl[0]
@@ -55,6 +72,8 @@ class Scheduler:
                         WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates[0][0])
                     except IndexError:
                         await bot.send_message(user_id, 'api-key is not valid')
+                        return
+                    if not await self.check_user_account_status(user_id):
                         return
                     await bot.send_message(user_id, f'{await WeatherInformation.get_current_weather_short()}')
                     continue

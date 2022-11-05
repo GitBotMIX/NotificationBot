@@ -6,6 +6,7 @@ class Database:
     def __init__(self):
         self.values_amount = None
         self.service_name = None
+        self.value = None
 
     def sql_start(self):
         global cur, base
@@ -17,9 +18,11 @@ class Database:
         base.execute('CREATE TABLE IF NOT EXISTS'
                      ' youtube(channel_name TEXT, channel_url TEXT, current_video TEXT, user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS'
-                     ' weather(city_name TEXT, coordinates TEXT, yandex_url TEXT, timezone TEXT, user_id TEXT)')
+                     ' weather(city_name TEXT, coordinates TEXT, yandex_url TEXT, timezone TEXT, requests_amount TEXT,'
+                     ' user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS weather_notification(time TEXT, status TEXT, user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS weather_api_key(api_key TEXT, user_id TEXT)')
+        base.execute('CREATE TABLE IF NOT EXISTS account(status TEXT, user_id TEXT)')
         base.commit()
         return self
 
@@ -32,6 +35,12 @@ class Database:
     async def sql_remove_where_and(self, table, where, AND, where_data, AND_data):
         cur.execute(f'DELETE FROM {table} WHERE {where} == ? AND {AND} == ?', (str(where_data), str(AND_data),))
         base.commit()
+
+
+    async def sql_account_add(self, user_id, status='default'):
+        self.values_amount = '?, ?'
+        self.service_name = 'account'
+        await self.sql_add((status, str(user_id),))
 
     async def sql_youtube_add(self, channel_name, channel_url, current_video, user_id):
         self.values_amount = '?, ?, ?, ?'
@@ -61,10 +70,10 @@ class Database:
         self.values_amount = '?, ?, ?'
         self.service_name = 'weather_notification'
         await self.sql_add((time, status, user_id,))
-    async def sql_weather_add(self, city_name, coordinates, yandex_url, user_id, timezone='3'):
-        self.values_amount = '?, ?, ?, ?, ?'
+    async def sql_weather_add(self, city_name, coordinates, yandex_url, user_id, timezone='3', requests_amount='0'):
+        self.values_amount = '?, ?, ?, ?, ?, ?'
         self.service_name = 'weather'
-        await self.sql_add((city_name, coordinates, yandex_url, timezone, user_id,))
+        await self.sql_add((city_name, coordinates, yandex_url, timezone, requests_amount, user_id,))
 
     async def sql_add(self, tuple_data):
         cur.execute(f'INSERT INTO {self.service_name} VALUES ({self.values_amount})', tuple_data)

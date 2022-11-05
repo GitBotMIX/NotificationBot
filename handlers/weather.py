@@ -14,7 +14,7 @@ from states import weather_states
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-async def choice_weather(message: types.Message, state: FSMContext):
+async def choice_weather(message: types.Message):
     if await Database().get_all_row_in_table_where('weather', 'user_id', 'user_id', str(message.from_user.id)):
         await message.answer('Меню Yandex.Weather', reply_markup=kb_weather)
     else:
@@ -28,7 +28,11 @@ async def add_city(message: types.Message, state: FSMContext):
     if coordinates != False:
         await message.answer('Город сохранен!', reply_markup=kb_weather)
         api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
-        WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates[0][0])
+        try:
+            WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates)
+        except IndexError:
+            await message.answer('api-key is not valid')
+            return
         yandex_url = await WeatherInformation.get_yandex_site_url()
         await Database().sql_weather_add(message.text, coordinates, yandex_url, str(message.from_user.id))
 
@@ -65,11 +69,16 @@ async def weather_query_handler(call: types.CallbackQuery):
 
 
 async def get_weather(message: types.Message):
+    user_id = message.from_user.id
+    exist_user_autorizate = await Database().get_all_row_in_table_where('weather', 'user_id', 'user_id', user_id)
+    if not exist_user_autorizate:
+        await choice_weather(message)
+        return
     coordinates = await Database().get_all_row_in_table_where(
-        'weather', 'coordinates', 'user_id', str(message.from_user.id))
+        'weather', 'coordinates', 'user_id', str(user_id))
     api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
     WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates[0][0])
-    url = await Database().get_all_row_in_table_where("weather", "yandex_url", "user_id", str(message.from_user.id))
+    url = await Database().get_all_row_in_table_where("weather", "yandex_url", "user_id", str(user_id))
     try:
         await message.answer(f'{await WeatherInformation.get_current_weather()}',
                              reply_markup=markups.get_weather_inline_kb(message, url))
@@ -79,12 +88,19 @@ async def get_weather(message: types.Message):
 
 async def user_set_notification(message: types.Message):
     user_id = message.from_user.id
+    exist_user_autorizate = await Database().get_all_row_in_table_where('weather', 'user_id', 'user_id', user_id)
+    if not exist_user_autorizate:
+        await choice_weather(message)
+        return
     notification_status = await Database().get_all_row_in_table_where(
         'notification_status', 'weather', 'user_id', user_id)
+
     if notification_status:
         pass
     else:
         await Database().sql_notification_status_add('ON', user_id)
+        notification_status = await Database().get_all_row_in_table_where(
+            'notification_status', 'weather', 'user_id', user_id)
     existing_time = await Database().get_all_row_in_table_where('weather_notification', 'time', 'user_id', user_id)
     existing_time = await YandexWeather.list_tuple_to_list_str(existing_time)
     await message.answer("Выбери время ежедневного уведомления о прогнозе",

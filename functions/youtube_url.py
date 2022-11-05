@@ -8,7 +8,8 @@ async def check(url):
         title_text = title_textF(url)
     except:
         return False
-    if 'https://www.youtube.com/c/' not in url and 'https://www.youtube.com/channel/' not in url:
+    if 'https://www.youtube.com/c/' not in url and 'https://www.youtube.com/channel/' not in url\
+            and 'https://www.youtube.com/user/' not in url:
         return False
     if 'https://www.youtube.com/' in url:
         if '404 Not Found' not in title_text:

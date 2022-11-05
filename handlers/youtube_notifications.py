@@ -24,6 +24,11 @@ async def add_youtube_channel(message: types.Message):
     await Scheduler().youtube_video_listen()
 
 
+async def channel_name_corrector(channel_name):
+    if len(channel_name) > 30:
+        channel_name = channel_name[0:30]
+    return channel_name
+
 async def add_youtube_channel_set(message: types.Message, state: FSMContext):
     message_text = await youtube_url.url_corrector(message.text)
     channel_name = await youtube_url.check(message_text)
@@ -38,8 +43,9 @@ async def add_youtube_channel_set(message: types.Message, state: FSMContext):
         if url_user_existence_check:
             await message.answer('Уведомления о этом канале уже включены')
         else:
-            if await Database().existance_check_user_id(user_id, 'notification_status') == False:
+            if not await Database().existance_check_user_id(user_id, 'notification_status'):
                 await Database().sql_notification_status_add('ON', user_id)
+            channel_name = await channel_name_corrector(channel_name)
             await message.answer(f'Уведомления о канале "{channel_name}" включены!')
             await Database().sql_youtube_add(channel_name, message_text, await youtube_url.parse_videos(message_text),
                                              user_id)
@@ -47,6 +53,7 @@ async def add_youtube_channel_set(message: types.Message, state: FSMContext):
 
 
 def get_keyboard_delete_youtube_channel(data):
+    print(data)
     markup = InlineKeyboardMarkup()  # создаём клавиатуру
     markup.row_width = 1  # кол-во кнопок в строке
     for i in data:  # цикл для создания кнопок
@@ -83,7 +90,10 @@ async def update_youtube_notification_status(call: types.CallbackQuery):
 
 async def delete_youtube_channel(message: types.Message):
     data = await Database().get_all_row_in_table_where('youtube', 'channel_name', 'user_id', message.from_user.id)
-    await message.answer('Какой канал удалить?', reply_markup=get_keyboard_delete_youtube_channel(data))
+    if data:
+        await message.answer('Какой канал удалить?', reply_markup=get_keyboard_delete_youtube_channel(data))
+    else:
+        await message.answer('У тебя ещё нету отслеживаемых каналов, ты можешь добаить их командой "/Добавить канал"')
 
 
 def get_keyboard_youtube_notifications_setting(notification_status):

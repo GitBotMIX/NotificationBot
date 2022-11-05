@@ -25,16 +25,19 @@ async def set_city_input(message: types.Message):
 
 
 async def set_city(message: types.Message, state: FSMContext):
-    coordinates = await YandexWeather.get_coordinates_from_city_name(message.text)
-    if coordinates:
-        await message.answer('Город обновлен!', reply_markup=kb_weather)
-        api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
-        WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates)
-        yandex_url = await WeatherInformation.get_yandex_site_url()
-        await Database().sql_weather_update(message.text, yandex_url, coordinates, str(message.from_user.id))
-    else:
-        await message.answer('Введено не верное название города!', reply_markup=kb_main)
-    await state.finish()
+    try:
+        coordinates = await YandexWeather.get_coordinates_from_city_name(message.text)
+        if coordinates:
+            await message.answer('Город обновлен!', reply_markup=kb_weather)
+            api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
+            WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates)
+            yandex_url = await WeatherInformation.get_yandex_site_url()
+            await Database().sql_weather_update(message.text, yandex_url, coordinates, str(message.from_user.id))
+        else:
+            await message.answer('Введено не верное название города!', reply_markup=kb_main)
+        await state.finish()
+    except:
+        await message.answer('Превышен лимит запросов, попробуй позже')
 
 async def add_api_key(message: types.Message):
     api_key_data = message.text.replace('Добавить API Ключ: ', '')

@@ -14,13 +14,17 @@ class Database:
         if base:
             print('Data base connected OK!')
         base.execute('CREATE TABLE IF NOT EXISTS notification_status(youtube TEXT, weather TEXT, user_id TEXT)')
-        base.execute('CREATE TABLE IF NOT EXISTS youtube(channel_name TEXT, channel_url TEXT, current_video TEXT, user_id TEXT)')
-        base.execute('CREATE TABLE IF NOT EXISTS weather(city_name TEXT, coordinates TEXT, yandex_url TEXT, user_id TEXT)')
-        base.execute('CREATE TABLE IF NOT EXISTS weather_notification(time TEXT, user_id TEXT)')
+        base.execute('CREATE TABLE IF NOT EXISTS'
+                     ' youtube(channel_name TEXT, channel_url TEXT, current_video TEXT, user_id TEXT)')
+        base.execute('CREATE TABLE IF NOT EXISTS'
+                     ' weather(city_name TEXT, coordinates TEXT, yandex_url TEXT, timezone TEXT, user_id TEXT)')
+        base.execute('CREATE TABLE IF NOT EXISTS weather_notification(time TEXT, status TEXT, user_id TEXT)')
         base.execute('CREATE TABLE IF NOT EXISTS weather_api_key(api_key TEXT, user_id TEXT)')
         base.commit()
         return self
 
+    async def get_net_value(self, tuple_in_list: list) -> str:
+        return tuple_in_list[0][0]
     async def sql_remove_where(self, table, where, where_data):
         cur.execute(f'DELETE FROM {table} WHERE {where} == ?', (str(where_data),))
         base.commit()
@@ -44,19 +48,23 @@ class Database:
                     (str(city_name), yandex_url, str(coordinates), str(user_id)))
         base.commit()
 
+    async def sql_weather_notification_update(self, status, time, user_id):
+        cur.execute(f'UPDATE weather_notification SET status == ? WHERE time == ? AND user_id == ?',
+                    (status, time, user_id,))
+        base.commit()
     async def sql_weather_api_key_add(self, api_key: str, user_id: str):
         self.values_amount = '?, ?'
         self.service_name = 'weather_api_key'
         await self.sql_add((api_key, user_id,))
 
-    async def sql_weather_notification_add(self, time, user_id):
-        self.values_amount = '?, ?'
+    async def sql_weather_notification_add(self, time, user_id, status='await'):
+        self.values_amount = '?, ?, ?'
         self.service_name = 'weather_notification'
-        await self.sql_add((time, user_id,))
-    async def sql_weather_add(self, city_name, coordinates, yandex_url, user_id):
-        self.values_amount = '?, ?, ?, ?'
+        await self.sql_add((time, status, user_id,))
+    async def sql_weather_add(self, city_name, coordinates, yandex_url, user_id, timezone='3'):
+        self.values_amount = '?, ?, ?, ?, ?'
         self.service_name = 'weather'
-        await self.sql_add((city_name, coordinates, yandex_url, user_id,))
+        await self.sql_add((city_name, coordinates, yandex_url, timezone, user_id,))
 
     async def sql_add(self, tuple_data):
         cur.execute(f'INSERT INTO {self.service_name} VALUES ({self.values_amount})', tuple_data)
@@ -75,6 +83,8 @@ class Database:
                                  (str(user_id),)).fetchone()
         return await self.existance_check(check)
 
+    async def get_all_rows_in_table(self, table):
+        return cur.execute(f'SELECT * FROM {table}').fetchall()
     async def get_all_row_in_table(self, table, row):
         return cur.execute(f'SELECT {row} FROM {table}').fetchall()
 
@@ -88,6 +98,8 @@ class Database:
             row.append(i[0])
             row_second.append(i[1])
         return row, row_second
+
+
 
 
     async def get_all_rows_in_table_where(self, table, row, row_second,  where, where_data):

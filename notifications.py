@@ -3,11 +3,15 @@ import asyncio
 from functions import youtube_url
 from data_base.sqlite_db import Database
 from create_bot import dp, bot
+import datetime
+import time
+from functions.YandexWeather import GetWeatherInformation
 
 
 class Scheduler:
     async def make_task(self):
         aioschedule.every(30).seconds.do(self.youtube_video_listen)
+        aioschedule.every(10).seconds.do(self.send_weather_notification)
         #aioschedule.every(5).seconds.do(self.display_notification)
         while True:
             await aioschedule.run_pending()
@@ -19,6 +23,52 @@ class Scheduler:
             if i[0] not in updated_user_id_list:
                 updated_user_id_list.append(i[0])
         return updated_user_id_list
+
+    async def unix_to_gmt_time(self, unix_time: int) -> int:
+        time = datetime.datetime.utcfromtimestamp(unix_time)
+        return int(time.strftime('%H'))
+
+
+    async def send_weather_notification(self):
+        weather_notification_list = await Database().get_all_rows_in_table('weather_notification')
+        for listEl in weather_notification_list:
+            user_id = listEl[2]
+            send_status = listEl[1]
+            notification_time = listEl[0]
+            notification_status = await Database().get_all_row_in_table_where_and(
+                'notification_status', 'weather', 'weather', 'user_id', 'ON', user_id)
+            if not notification_status:
+                continue
+            current_hour_utc = await self.unix_to_gmt_time(int(time.time()))
+            timezone = await Database().get_all_row_in_table_where(
+                'weather', 'timezone', 'user_id', user_id)
+            cur_user_time = current_hour_utc + int(timezone[0][0])
+            if send_status == 'await':
+                if cur_user_time == int(notification_time):
+                    await Database().sql_weather_notification_update(
+                        str(cur_user_time-1), notification_time, user_id)
+
+                    coordinates = await Database().get_all_row_in_table_where(
+                        'weather', 'coordinates', 'user_id', user_id)
+                    api_key = await Database().get_all_row_in_table('weather_api_key', 'api_key')
+                    try:
+                        WeatherInformation = GetWeatherInformation(api_key[0][0], coordinates[0][0])
+                    except IndexError:
+                        await bot.send_message(user_id, 'api-key is not valid')
+                        return
+                    await bot.send_message(user_id, f'{await WeatherInformation.get_current_weather_short()}')
+                    continue
+                else:
+                    continue
+            if cur_user_time == int(send_status):
+                await Database().sql_weather_notification_update(
+                    'await', notification_time, user_id)
+                continue
+
+
+
+
+
 
     async def youtube_video_listen(self):
         all_user_id = await self.remove_repeated_user_id(await Database().get_all_row_in_table('youtube', 'user_id'))

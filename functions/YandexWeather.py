@@ -112,15 +112,50 @@ class GetWeatherInformation:
         if hour_one != 0:
             return hour_one, 1
         else:
-            hour_two = await self.get_weather_info_prec_period(request, hour + 1)
-            if hour_two != 0:
-                return hour_two, 2
-            else:
-                hour_three = await self.get_weather_info_prec_period(request, hour + 2)
-                if hour_three != 0:
-                    return hour_three, 3
+            if hour <= 22:
+                hour_two = await self.get_weather_info_prec_period(request, hour + 1)
+                if hour_two != 0:
+                    return hour_two, 2
                 else:
-                    return False, False
+                    if hour <= 21:
+                        hour_three = await self.get_weather_info_prec_period(request, hour + 2)
+                        if hour_three != 0:
+                            return hour_three, 3
+                        else:
+                            return False, False
+                    else:
+                        return False, False
+            else:
+                return False, False
+
+    async def get_current_weather_short(self):
+        request = await self.requests_get()
+        current_hour = await self.get_current_hour(request)
+        #current_hour = 8
+
+        temperature, temperature_feels_like, wind_speed,\
+        humidity, wind_dir, condition = await self.get_weather_info_fact(request)
+        condition_it_raining = ['drizzle', 'light-rain', 'rain', 'moderate-rain', 'heavy-rain', 'continuous-heavy-rain',
+                                'showers', 'wet-snow', 'light-snow', 'snow', 'snow-showers', 'hail',
+                                'thunderstorm-with-rain', 'thunderstorm-with-hail']
+        condition_text, condition_icon, wind_dir_icon, daytime_icon = await self.get_weather_arrays()
+        if condition in condition_it_raining:
+            prec_text = ''
+        else:
+            prec_type_text_array = {1: 'дождь', 2: 'дождь со снегом', 3: 'снег', 4: 'град'}
+            prec_type_symbol_array = {1: '☔', 2: '☔', 3: '☃', 4: '☄'}
+            prec_for_time, prec_for_time_hour = await self.prec_for_time_check(request, int(current_hour))
+            if prec_for_time:
+                if prec_for_time_hour == 1:
+                    prec_text = f'{prec_type_symbol_array[prec_for_time]}' \
+                                f'В течение часа ожидается {prec_type_text_array[prec_for_time]}'
+                else:
+                    prec_text = f'{prec_type_symbol_array[prec_for_time]}' \
+                                f'В ближайшие {prec_for_time_hour} часа ожидается {prec_type_text_array[prec_for_time]}'
+            else:
+                prec_text = f'⛱В ближайшие 3 часа осадков не ожидается '
+        return await self.get_weather_text_fact_short(condition_icon, condition, temperature,
+                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, prec_text)
     async def get_current_weather(self):
         request = await self.requests_get()
         current_hour = await self.get_current_hour(request)
@@ -184,14 +219,18 @@ class GetWeatherInformation:
                f'       💧{hn}%\n'
 
     async def get_weather_text_fact(self, condition_icon, condition_text, condition, temperature,
-                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, humidity, prec_type):
+                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, humidity, prec_text):
         return f'Сейчас:\n\n' \
                f'   {condition_icon[condition]}{condition_text[condition].title()}\n' \
                f'   🌡{temperature}°({temperature_feels_like}°)\n' \
                f'   {wind_dir_icon[wind_dir]}{wind_speed}м/c\n' \
                f'   💧{humidity}%\n\n' \
-               f'   {prec_type}'
+               f'   {prec_text}'
 
+    async def get_weather_text_fact_short(self, condition_icon, condition, temperature,
+                               temperature_feels_like, wind_dir_icon, wind_dir, wind_speed, prec_text):
+        return f'Сейчас: {condition_icon[condition]}; 🌡{temperature}°({temperature_feels_like}°); ' \
+               f'{wind_dir_icon[wind_dir]}{wind_speed}м/c;\n{prec_text}'
     async def get_weather_info_parts(self, request_json, part_name):
         temperature = request_json['parts'][part_name]["temp_avg"]
         temperature_feels_like = request_json['parts'][part_name]["feels_like"]
